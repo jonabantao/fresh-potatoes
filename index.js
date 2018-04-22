@@ -12,18 +12,52 @@ Promise.resolve()
   .then(() => app.listen(PORT, () => console.log(`App listening on port ${PORT}`)))
   .catch((err) => { if (NODE_ENV === 'development') console.error(err.stack); });
 
-// INITIALIZE SEQUALIZE
+// INITIALIZE SEQUELIZE
 const sequelize = new Sequelize('main', 'user', 'supersecurepassword', {
   dialect: 'sqlite',
   storage: DB_PATH,
 });
 
+// SEQUELIZE MODELS
+/* Film */
+const Film = sequelize.define('film', {
+  id: {
+    type: Sequelize.INTEGER,
+    primaryKey: true,
+  },
+  title: Sequelize.STRING,
+  release_date: Sequelize.DATEONLY,
+  tagline: Sequelize.TEXT,
+  revenue: Sequelize.INTEGER,
+  budget: Sequelize.INTEGER,
+  runtime: Sequelize.INTEGER,
+  original_language: Sequelize.STRING,
+  status: Sequelize.STRING,
+  genre_id: {
+    type: Sequelize.INTEGER,
+  },
+}, {
+  timestamps: false,
+});
+
+/* Genre */
+const Genre = sequelize.define('genre', {
+  id: {
+    type: Sequelize.INTEGER,
+    primaryKey: true,
+  },
+  name: Sequelize.STRING,
+}, {
+  timestamps: false,
+});
+
 sequelize
   .authenticate()
-  .then(() => {
-    console.log('Connection has been established successfully.');
-  })
-  .catch(err => {
+  .then(() => Film.findAll())
+  .then(users => console.log(JSON.stringify(users[0].dataValues)))
+  .then(() => Genre.findById(1))
+  .then(genre => console.log(JSON.stringify(genre)))
+  .catch((err) => {
     console.error('Unable to connect to the database:', err);
   });
 
