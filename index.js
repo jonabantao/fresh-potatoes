@@ -58,7 +58,7 @@ Film.belongsTo(Genre);
 Genre.hasMany(Film);
 
 // HELPER FUNCTIONS
-const EXTERNAL_FILM_API = 'http://credentials-api.generalassemb.ly/4576f55f-c427-4cfc-a11c-5bfe914ca6c1';
+const EXTERNAL_FILM_API = 'http://credentials-api.generalassemb.ly/4576f55f-c427-4cfc-a11c-5bfe914ca6c1?films=';
 
 function routeNotFound(_, res) {
   return res.status(404).json({ message: 'Not found' });
@@ -126,6 +126,46 @@ function filterByGenreAndYearRange(searchedFilm) {
   });
 }
 
+function queryExternalAPI(filmId) {
+  return new Promise((resolve, reject) => {
+    request(`${EXTERNAL_FILM_API}${filmId}`, (err, res, body) => {
+      if (err) {
+        reject(err);
+      }
+
+      resolve(JSON.parse(body));
+    });
+  });
+}
+
+function calculateReviewAverage(reviews) {
+  const totalScore = reviews.reduce((sum, review) => sum + review.rating, 0);
+  return parseFloat((totalScore / reviews.length).toFixed(1), 10);
+}
+
+function appendReviewsFromExternalAPI(films) {
+  return Promise.all(films.map((film) => {
+    return queryExternalAPI(film.id)
+      .then((payload) => {
+        const reviews = payload[0].reviews;
+        film.reviews = reviews.length;
+        film.averageRating = calculateReviewAverage(reviews);
+
+        return film;
+      });
+  }));
+}
+
+function formatRecommendedPayload(recommendedFilms, limit, offset) {
+  return {
+    recommendations: recommendedFilms.slice(offset, limit),
+    meta: {
+      limit,
+      offset,
+    },
+  };
+}
+
 // ROUTE HANDLER
 function getFilmRecommendations({ params, query }, res) {
   if (isNotNumeric(params.id, query.offset, query.limit)) {
@@ -134,16 +174,17 @@ function getFilmRecommendations({ params, query }, res) {
 
   const filmId = params.id;
   // Handles if user wants unconstrained limit
-  const limit = query.limit === undefined ? 10 : query.limit;
+  const limit = query.limit === undefined ? 10 : parseInt(query.limit, 10);
   // Offset defaults to 0, therefore || operator will default to 0 if undef or 0
-  const offset = query.offset || 0;
+  const offset = parseInt(query.offset, 10) || 0;
 
-  fetchFilm(filmId)
+  return fetchFilm(filmId)
     .then(filterByGenreAndYearRange)
     .then(formatModelInstance)
-    .then(console.log);
-
-  return res.status(416).json({ hey: 'wat' });
+    .then(appendReviewsFromExternalAPI)
+    .then(films => formatRecommendedPayload(films, limit, offset))
+    .then(payload => res.status(200).json(payload))
+    .catch(() => res.status(500).json({ message: 'Error occured' }));
 }
 
 // ROUTES
