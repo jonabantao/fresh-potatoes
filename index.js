@@ -37,6 +37,7 @@ const Film = sequelize.define('film', {
     type: Sequelize.INTEGER,
   },
 }, {
+  underscored: true,
   timestamps: false,
 });
 
@@ -48,29 +49,63 @@ const Genre = sequelize.define('genre', {
   },
   name: Sequelize.STRING,
 }, {
+  underscored: true,
   timestamps: false,
 });
 
-sequelize
-  .authenticate()
-  .then(() => Film.findAll())
-  .then(users => console.log(JSON.stringify(users[0].dataValues)))
-  .then(() => Genre.findById(1))
-  .then(genre => console.log(JSON.stringify(genre)))
-  .catch((err) => {
-    console.error('Unable to connect to the database:', err);
+/* Associations */
+Film.belongsTo(Genre);
+Genre.hasMany(Film);
+
+// HELPER FUNCTIONS
+function routeNotFound(_, res) {
+  return res.status(404).json({ message: 'Not found' });
+}
+
+function isNotNumeric(...params) {
+  return params
+    .filter(param => param !== undefined)
+    .some(remainder => Number.isNaN(Number(remainder)));
+}
+
+function fetchFilm(filmId) {
+  return Film.findById(filmId, {
+    attributes: [
+      'id',
+      ['release_date', 'releaseDate'],
+      ['genre_id', 'genreId'],
+    ],
   });
+}
+
+function filterByGenreAndYearRange(searchedFilm) {
+  const { id, releaseDate, genreId } = searchedFilm;
+  const searchedFilmYr = new Date(releaseDate).getFullYear();
+  const lowerYr = new Date(releaseDate).getFullYear() - 15;
+  const upperYr = new Date(release)
+}
 
 // ROUTE HANDLER
-function getFilmRecommendations(req, res) {
-  console.log(req.params.id);
-  res.status(200).send({
-    recommendations: [],
-    meta: {},
-  }).json();
+function getFilmRecommendations({ params, query }, res) {
+  if (isNotNumeric(params.id, query.offset, query.limit)) {
+    return res.status(422).json({ message: 'Invalid ID' });
+  }
+
+  const searchedFilmId = params.id;
+  // Handles if user wants unconstrained limit
+  const limit = query.limit === undefined ? 10 : query.limit;
+  // Offset defaults to 0, therefore || operator will default to 0 if undef or 0
+  const offset = query.offset || 0;
+
+  fetchFilm(searchedFilmId)
+    .then(foundFilm => filterByGenreAndYearRange(foundFilm));
+
+  return res.status(416).json({ hey: 'wat' });
 }
+
 // ROUTES
 app.get('/films/:id/recommendations', getFilmRecommendations);
+app.get('*', routeNotFound);
 
 
 module.exports = app;
