@@ -1,4 +1,3 @@
-const sqlite = require('sqlite');
 const Sequelize = require('sequelize');
 const request = require('request');
 const express = require('express');
@@ -90,10 +89,37 @@ function fetchFilm(filmId) {
   });
 }
 
+function appendFilmInformation(films, limit, offset) {
+  const filmIds = films.map(film => film.film_id);
+  return Film.findAll({
+    attributes: [
+      'id',
+      'title',
+      ['release_date', 'releaseDate'],
+      ['genre_id', 'genreId'],
+    ],
+    where: {
+      id: {
+        in: filmIds,
+      },
+    },
+    include: {
+      model: Genre,
+      required: true,
+    },
+    limit,
+    offset,
+  }).then(data => data.map((filmInfo, idx) => Object.assign(films[idx], filmInfo.toJSON())));
+}
+
 function formatModelInstance(films) {
   return films.map((film) => {
-    film.setDataValue('genre', film.genre.name);
-    return film.toJSON();
+    const formattedFilm = Object.assign(film);
+    delete formattedFilm.genreId;
+    delete formattedFilm.film_id;
+    formattedFilm.genre = formattedFilm.genre.name;
+
+    return formattedFilm;
   });
 }
 
@@ -112,10 +138,6 @@ function fetchIdByYearRangeAndGenre(searchedFilm) {
       id: {
         ne: id,
       },
-    },
-    include: {
-      model: Genre,
-      required: true,
     },
     order: [
       ['id'],
@@ -141,7 +163,7 @@ function calculateReviewAverage(reviews) {
   }
 
   const totalScore = reviews.reduce((sum, review) => sum + review.rating, 0);
-  return parseFloat((totalScore / reviews.length).toFixed(1), 10);
+  return parseFloat((totalScore / reviews.length)).toFixed(2);
 }
 
 function isHighlyRated(film) {
@@ -187,9 +209,8 @@ function getFilmRecommendations({ params, query }, res) {
     .then(fetchIdByYearRangeAndGenre)
     .then(queryExternalAPI)
     .then(filterByReviews)
-    .then(console.log);
+    .then(appendFilmInformation)
     .then(formatModelInstance)
-    .then(filterByReviews)
     .then(films => formatRecommendedPayload(films, limit, offset))
     .then(payload => res.status(200).json(payload))
     .catch(() => res.status(500).json({ message: 'Error occured' }));
