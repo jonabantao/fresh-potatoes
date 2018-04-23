@@ -97,14 +97,12 @@ function formatModelInstance(films) {
   });
 }
 
-function filterByGenreAndYearRange(searchedFilm) {
+function fetchIdByYearRangeAndGenre(searchedFilm) {
   const { id, releaseDate, genreId } = searchedFilm.get();
 
   return Film.findAll({
     attributes: [
       'id',
-      'title',
-      ['release_date', 'releaseDate'],
     ],
     where: {
       genre_id: genreId,
@@ -122,13 +120,12 @@ function filterByGenreAndYearRange(searchedFilm) {
     order: [
       ['id'],
     ],
-    limit: 3,
-  });
+  }).then(films => films.map(film => film.toJSON().id));
 }
 
-function queryExternalAPI(filmId) {
+function queryExternalAPI(filmIdArray) {
   return new Promise((resolve, reject) => {
-    request(`${EXTERNAL_FILM_API}${filmId}`, (err, res, body) => {
+    request(`${EXTERNAL_FILM_API}${filmIdArray.toString()}`, (err, res, body) => {
       if (err) {
         reject(err);
       }
@@ -139,21 +136,29 @@ function queryExternalAPI(filmId) {
 }
 
 function calculateReviewAverage(reviews) {
+  if (!reviews.length) {
+    return 0;
+  }
+
   const totalScore = reviews.reduce((sum, review) => sum + review.rating, 0);
   return parseFloat((totalScore / reviews.length).toFixed(1), 10);
 }
 
-function appendReviewsFromExternalAPI(films) {
-  return Promise.all(films.map((film) => {
-    return queryExternalAPI(film.id)
-      .then((payload) => {
-        const reviews = payload[0].reviews;
-        film.reviews = reviews.length;
-        film.averageRating = calculateReviewAverage(reviews);
+function isHighlyRated(film) {
+  return film.reviews >= 5 && film.averageRating > 4.0;
+}
 
-        return film;
-      });
-  }));
+function appendRatings(film) {
+  return Object.assign(film, {
+    reviews: film.reviews.length,
+    averageRating: calculateReviewAverage(film.reviews),
+  });
+}
+
+function filterByReviews(films) {
+  return films
+    .map(appendRatings)
+    .filter(isHighlyRated);
 }
 
 function formatRecommendedPayload(recommendedFilms, limit, offset) {
@@ -179,9 +184,12 @@ function getFilmRecommendations({ params, query }, res) {
   const offset = parseInt(query.offset, 10) || 0;
 
   return fetchFilm(filmId)
-    .then(filterByGenreAndYearRange)
+    .then(fetchIdByYearRangeAndGenre)
+    .then(queryExternalAPI)
+    .then(filterByReviews)
+    .then(console.log);
     .then(formatModelInstance)
-    .then(appendReviewsFromExternalAPI)
+    .then(filterByReviews)
     .then(films => formatRecommendedPayload(films, limit, offset))
     .then(payload => res.status(200).json(payload))
     .catch(() => res.status(500).json({ message: 'Error occured' }));
