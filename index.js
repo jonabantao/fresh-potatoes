@@ -58,6 +58,8 @@ Film.belongsTo(Genre);
 Genre.hasMany(Film);
 
 // HELPER FUNCTIONS
+const EXTERNAL_FILM_API = 'http://credentials-api.generalassemb.ly/4576f55f-c427-4cfc-a11c-5bfe914ca6c1';
+
 function routeNotFound(_, res) {
   return res.status(404).json({ message: 'Not found' });
 }
@@ -66,6 +68,16 @@ function isNotNumeric(...params) {
   return params
     .filter(param => param !== undefined)
     .some(remainder => Number.isNaN(Number(remainder)));
+}
+
+function setYearRange(dateYear) {
+  const lowerYr = new Date(dateYear);
+  const upperYr = new Date(dateYear);
+
+  lowerYr.setFullYear(lowerYr.getFullYear() - 15);
+  upperYr.setFullYear(upperYr.getFullYear() + 15);
+
+  return [lowerYr, upperYr];
 }
 
 function fetchFilm(filmId) {
@@ -78,11 +90,40 @@ function fetchFilm(filmId) {
   });
 }
 
+function formatModelInstance(films) {
+  return films.map((film) => {
+    film.setDataValue('genre', film.genre.name);
+    return film.toJSON();
+  });
+}
+
 function filterByGenreAndYearRange(searchedFilm) {
-  const { id, releaseDate, genreId } = searchedFilm;
-  const searchedFilmYr = new Date(releaseDate).getFullYear();
-  const lowerYr = new Date(releaseDate).getFullYear() - 15;
-  const upperYr = new Date(release)
+  const { id, releaseDate, genreId } = searchedFilm.get();
+
+  return Film.findAll({
+    attributes: [
+      'id',
+      'title',
+      ['release_date', 'releaseDate'],
+    ],
+    where: {
+      genre_id: genreId,
+      release_date: {
+        between: setYearRange(releaseDate),
+      },
+      id: {
+        ne: id,
+      },
+    },
+    include: {
+      model: Genre,
+      required: true,
+    },
+    order: [
+      ['id'],
+    ],
+    limit: 3,
+  });
 }
 
 // ROUTE HANDLER
@@ -91,14 +132,16 @@ function getFilmRecommendations({ params, query }, res) {
     return res.status(422).json({ message: 'Invalid ID' });
   }
 
-  const searchedFilmId = params.id;
+  const filmId = params.id;
   // Handles if user wants unconstrained limit
   const limit = query.limit === undefined ? 10 : query.limit;
   // Offset defaults to 0, therefore || operator will default to 0 if undef or 0
   const offset = query.offset || 0;
 
-  fetchFilm(searchedFilmId)
-    .then(foundFilm => filterByGenreAndYearRange(foundFilm));
+  fetchFilm(filmId)
+    .then(filterByGenreAndYearRange)
+    .then(formatModelInstance)
+    .then(console.log);
 
   return res.status(416).json({ hey: 'wat' });
 }
