@@ -1,3 +1,4 @@
+const sqlite = require('sqlite');
 const Sequelize = require('sequelize');
 const request = require('request');
 const express = require('express');
