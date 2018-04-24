@@ -60,10 +60,6 @@ Genre.hasMany(Film);
 // HELPER FUNCTIONS
 const EXTERNAL_FILM_API = 'http://credentials-api.generalassemb.ly/4576f55f-c427-4cfc-a11c-5bfe914ca6c1?films=';
 
-function routeNotFound(_, res) {
-  return res.status(404).json({ message: 'Not found' });
-}
-
 function isNotNumeric(...params) {
   return params
     .filter(param => param !== undefined)
@@ -215,6 +211,10 @@ function getFilmRecommendations({ params, query }, res) {
     .then(films => formatRecommendedPayload(films, limit, offset))
     .then(payload => res.status(200).json(payload))
     .catch(() => res.status(500).json({ message: 'Error occured' }));
+}
+
+function routeNotFound(_, res) {
+  return res.status(404).json({ message: 'Not found' });
 }
 
 // ROUTES
